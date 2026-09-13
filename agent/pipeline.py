@@ -46,7 +46,6 @@ User question: {user_query}"""
 def generate(
     user_query: str,
     context: str,
-    temperature: float = 0.2,
     max_tokens: int = 1024,
 ) -> str:
     """Single Claude call: context + question -> answer."""
@@ -54,7 +53,6 @@ def generate(
     message = client.messages.create(
         model=CLAUDE_MODEL,
         max_tokens=max_tokens,
-        temperature=temperature,
         system=SYSTEM_PROMPT,
         messages=[{"role": "user", "content": _build_user_message(user_query, context)}],
     )
