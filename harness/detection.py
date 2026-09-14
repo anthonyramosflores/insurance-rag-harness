@@ -99,8 +99,10 @@ def groundedness_check(answer: str, context: str) -> DetectionResult:
 
 HEDGE_PHRASES = [
     "i don't know", "i'm not sure", "not available in the context",
-    "cannot find", "no information", "unclear from the context",
-    "not present in the context", "unable to determine",
+    "cannot find", "could not find", "couldn't find", "no information",
+    "unclear from the context", "not present in the context",
+    "unable to determine", "does not contain", "doesn't contain",
+    "no relevant", "not mentioned",
 ]
 
 
