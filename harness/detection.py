@@ -74,8 +74,6 @@ def groundedness_check(answer: str, context: str) -> DetectionResult:
         parsed = json.loads(raw)
         claims = parsed.get("claims", [])
     except (json.JSONDecodeError, AttributeError):
-        # Fail safe, not fail open: if the checker itself is unparseable,
-        # treat the answer as suspect rather than silently passing it.
         return DetectionResult(
             method="groundedness",
             flagged=True,
@@ -122,4 +120,67 @@ def confidence_signal(answer: str) -> DetectionResult:
         flagged=flagged,
         score=1.0 if flagged else 0.0,
         details={"hedged": hedges, "has_citation": has_citation},
+    )
+
+
+PARAPHRASE_PROMPT = """Rephrase the following question in a different way, preserving
+its exact meaning and intent. Respond with ONLY the rephrased question, nothing else.
+
+Question: {query}"""
+
+
+def self_consistency_check(generate_fn, user_query: str, context: str) -> DetectionResult:
+    """
+    Ask the same underlying question two different ways and check whether
+    the answers agree on their factual claims. Disagreement is a sign the
+    model isn't reliably grounded -- it's reconstructing an answer each time
+    rather than reading it consistently off the context.
+    """
+    client = _get_client()
+
+    paraphrase_msg = client.messages.create(
+        model=CLAUDE_MODEL,
+        max_tokens=200,
+        messages=[{"role": "user", "content": PARAPHRASE_PROMPT.format(query=user_query)}],
+    )
+    paraphrased_query = paraphrase_msg.content[0].text.strip()
+
+    answer_a = generate_fn(user_query, context)
+    answer_b = generate_fn(paraphrased_query, context)
+
+    compare_prompt = (
+        "Below are two answers to differently-worded versions of the same underlying "
+        "question. Do they agree on all factual claims (numbers, dates, statuses, amounts)? "
+        "Respond ONLY with JSON: {\"consistent\": true/false, \"disagreements\": [\"...\"]}\n\n"
+        f"Answer A: {answer_a}\n\nAnswer B: {answer_b}"
+    )
+    compare_msg = client.messages.create(
+        model=CLAUDE_MODEL,
+        max_tokens=512,
+        messages=[{"role": "user", "content": compare_prompt}],
+    )
+    raw = re.sub(r"^```(json)?|```$", "", compare_msg.content[0].text.strip(), flags=re.MULTILINE).strip()
+
+    try:
+        parsed = json.loads(raw)
+        consistent = parsed.get("consistent", False)
+        disagreements = parsed.get("disagreements", [])
+    except (json.JSONDecodeError, AttributeError):
+        return DetectionResult(
+            method="self_consistency",
+            flagged=True,
+            score=1.0,
+            details={"error": "could_not_parse_checker_output", "answer_a": answer_a, "answer_b": answer_b},
+        )
+
+    return DetectionResult(
+        method="self_consistency",
+        flagged=not consistent,
+        score=0.0 if consistent else 1.0,
+        details={
+            "paraphrased_query": paraphrased_query,
+            "answer_a": answer_a,
+            "answer_b": answer_b,
+            "disagreements": disagreements,
+        },
     )
