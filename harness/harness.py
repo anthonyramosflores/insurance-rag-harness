@@ -45,6 +45,8 @@ def run(
     user_query: str,
     n_results: int = 5,
     source_filter: str | None = None,
+    label: str | None = None,
+    log: bool = True,
 ) -> HarnessResult:
     """Run the full harnessed pipeline for one query."""
     retrieved = retrieve(user_query, n_results=n_results, source_filter=source_filter)
@@ -81,7 +83,7 @@ def run(
         if consistency.flagged:
             route = Route.HUMAN_REVIEW
 
-    return HarnessResult(
+    result = HarnessResult(
         query=user_query,
         answer=answer_text,
         route=route,
@@ -91,3 +93,19 @@ def run(
         confidence_flagged=conf.flagged,
         detail=detail,
     )
+
+    if log:
+        from evaluation.logging_db import log_run
+        log_run(
+            query=user_query,
+            answer=answer_text,
+            route=route.value,
+            flagged=route != Route.PASS,
+            groundedness_score=ground.score,
+            self_consistency_flagged=self_consistency_flagged,
+            confidence_flagged=conf.flagged,
+            detail=detail,
+            label=label,
+        )
+
+    return result
