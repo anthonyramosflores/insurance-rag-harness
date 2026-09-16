@@ -74,8 +74,21 @@ pip install -r requirements.txt
 cp .env.example .env   # add your ANTHROPIC_API_KEY
 
 python ingestion/mock_data.py
-# then build the vector index -- see agent/pipeline.py and embeddings/store.py
-# for the pieces, or run the indexing snippet from the build log
+
+python -c "
+from ingestion.loader import load_all
+from etl.transform import run_all_transforms
+from etl.chunk import all_chunks
+from embeddings.generate import embed_chunks
+from embeddings.store import upsert_chunks
+
+raw = load_all()
+transformed = run_all_transforms(raw)
+chunks = all_chunks(transformed)
+embedded = embed_chunks(chunks)
+upsert_chunks(embedded)
+print('Indexed', len(chunks), 'chunks')
+"
 
 python -m harness.eval_set          # safe-prompt eval
 python -m harness.adversarial_eval  # weakened-prompt adversarial eval
